@@ -1,0 +1,13 @@
+from django.http import HttpResponse
+import urllib2
+import urllib
+import requests
+def index(request):
+  url='https://accounts.google.com/o/oauth2/token'
+  CDE="4/9KebNRpAkd_4Qo5DdMQpF9WVTCRd.cke4ToDPozoXgrKXntQAax1A7B_DjAI"
+  headers = { 'User-Agent' : 'HTTP/1.1' }
+  values={'code':CDE,'client_id':'852394976838-0v1h2rgrdv9veg9biqqtqs71st1sluc4.apps.googleusercontent.com','client_secret':'Lj7lOS077DJzXa0Jfdh0-Q2_','redirect_uri':'http://localhost:8080/gglplus/','grant_type':'authorization_code'}
+  ur_values=urllib.urlencode(values)
+  a=urllib2.Request(url,ur_values,headers)
+  b=urllib2.urlopen(a)
+  return HttpResponse("thanks")
