@@ -1,0 +1,168 @@
+from linkedin import linkedin
+from viewer.models import project
+import json
+
+CONSUMER_KEY = '75nanr9qwylt2d'
+CONSUMER_SECRET = 'UpORpgoDH1iUl2kL'
+USER_TOKEN = 'ed27d929-57d8-4bbf-9acc-fd97e9a88541'
+USER_SECRET = '0ea37468-38b4-41b3-89c2-84d494be1536'
+
+RETURN_URL = 'http://127.0.0.1:8000/lkdn/'
+auth = linkedin.LinkedInDeveloperAuthentication(CONSUMER_KEY,
+CONSUMER_SECRET,USER_TOKEN,USER_SECRET,RETURN_URL,permissions=linkedin.PERMISSIONS.enums.values())
+app = linkedin.LinkedInApplication(auth)
+
+#x = app.get_profile()
+x = app.get_profile(selectors=['id', 'firstName', 'lastName', 'location', 'distance', 'numConnections', 'skill', 'educations'])
+y = project(firstname = x['firstName'], lastname = x['lastName'], ids = x['id'], location = x['location'], skills = x['skill'], 
+        distance =x['distance'], numconnections = x['numConnections'], educations = x['educations'])
+y.save()
+	def save_linkedin_connection_profile(x, json_data):
+		x.source_id = nvl(json_data, "id")
+		x.source = "linkedin"
+		x.first_name  = nvl(json_data, "firstName")
+		x.last_name = nvl(json_data, "lastName")
+		x.picture  = nvl(json_data, "pictureUrl")
+		x.profile_url  = nvl(json_data, "publicProfileUrl")
+		x.title = nvl(json_data, "headline")
+ 		#  x.locale = "" #Not available from linkedIn
+		x.num_connections = nvl(json_data, "numConnections")
+
+		x.phone_numbers = ""
+		if nvl(json_data, "phoneNumbers"):
+			if nvl(json_data["phoneNumbers"], "_total"):
+				if nvl(json_data["phoneNumbers"], "_total") > 0:
+				#	num_phones = nvl(json_data["phoneNumbers"], "_total")
+					x.phone_numbers = nvl(json_data["phoneNumbers"]["values"][0], "phoneNumber")
+
+		x.skills = ""
+		if nvl(json_data, "skills"):
+			if nvl(json_data["skills"], "_total") > 0:
+			   #	num_skills = nvl(json_data["skills"], "_total")
+				skills_list = []
+				for skill in nvl(json_data["skills"],"values"):
+					skills_list.append(nvl(skill["skill"],"name"))
+					skills_list.append(",")
+				x.skills = ''.join(skills_list)
+
+		# Save Connection_Profile as id is required in for storing educations
+		x.save()
+
+		# Store current_location
+		if nvl(json_data, "location"):
+			location_name = nvl(json_data["location"], "name")
+			#Check if location exists
+			l_exists_list = Location.objects.filter(name=location_name)
+			if len(l_exists_list):
+				location = l_exists_list[0]
+				x.current_location = location
+			else:
+				location = Location.objects.create()
+				location.name=location_name
+				location.save()
+				x.current_location = location
+
+		# store interests from interests text field
+		if nvl(json_data, "interests"):
+			x.interests_li = nvl(json_data, "interests")
+			# Storing this data into interests model is giving very bad results.
+			# int_list = []
+			# for interest in interests.split(','):
+				# int_list.append(interest.strip())
+			# for interest in int_list:
+				# name = interest
+				# category = ""
+				# info_type = "interest"
+				# new_interest = Connection_OtherInfo(name=name, category=category, info_type=info_type)
+				# new_interest.save()
+				# new_interest.connection_profile_set.add(self)
+
+		# store educations
+		if nvl(json_data, "educations"):
+			if nvl(json_data["educations"], "_total")>0:
+				for education_record in json_data["educations"]["values"]:
+					name = nvl(education_record, "schoolName")
+					# Get end year
+					year = None
+					if nvl(education_record, "endDate"):
+						if nvl(education_record["endDate"],"year"):
+							year = nvl(education_record["endDate"],"year")
+					# Get concentration (fieldOfStudy)
+					concentration = ""
+					if nvl(education_record, "fieldOfStudy"):
+						concentration = nvl(education_record, "fieldOfStudy")
+					# Get degree
+					degree = ""
+					if nvl(education_record, "degree"):
+						degree = nvl(education_record, "degree")
+					#Check if education exists for this user
+					edu_exists = Education_Info.objects.filter(connection_profile=x, name=name, year=year, concentration=concentration, degree=degree)
+					if not len(edu_exists):
+						# Create Education_Info object and save
+						try:
+							education_info = Education_Info(connection_profile=x, name=name, year=year, concentration=concentration, degree=degree)
+							education_info.save()
+						except Exception, e:
+							print "Unable to save Education Info:", sys.exc_info()
+
+		# store positions
+		if nvl(json_data, "positions"):
+			if nvl(json_data["positions"], "_total")>0:
+				for work_record in json_data["positions"]["values"]:
+					# Get company name
+					name = nvl(work_record["company"], "name")
+					# Get industry
+					industry = nvl(work_record["company"], "industry")
+					# Get position title, description
+					title = nvl(work_record, "title")
+					description = nvl(work_record, "summary")
+					# Get start date
+					start_date = None
+					if nvl(work_record, "startDate"):
+						if nvl(work_record["startDate"], "year"):
+							start_year = nvl(work_record["startDate"], "year")
+						else:
+							start_year = 1900
+						if nvl(work_record["startDate"], "month"):
+							start_month = nvl(work_record["startDate"], "month")
+						else:
+							start_month = 01
+						start_date = datetime.date(start_year, start_month, 01)
+					# Get end date
+					if nvl(work_record, "isCurrent"):
+						end_date = None
+					elif nvl(work_record, "endDate"):
+						if nvl(work_record["endDate"], "month"):
+							end_month = nvl(work_record["endDate"], "month")
+						else:
+							end_month = 01
+						if nvl(work_record["endDate"], "year"):
+							end_year = nvl(work_record["endDate"], "year")
+						else:
+							end_year = 1900
+						end_date = datetime.date(end_year, end_month, 01)
+					else:
+						end_date = None
+					# Get isCurrent position
+					if nvl(work_record, "isCurrent"):
+						isCurrent = nvl(work_record, "isCurrent")
+					else:
+						isCurrent = False
+					#Check if job exists for this user
+					job_exists = Work_Info.objects.filter(connection_profile=x, company_name=name, position=title, description=description, industry=industry, start_date=start_date, end_date=end_date, isCurrent=isCurrent)
+					if not len(job_exists):
+						# Create work_info object and save
+						try:
+							work_info = Work_Info(connection_profile=self, company_name=name, position=title, description=description, industry=industry, start_date=start_date, end_date=end_date, isCurrent=isCurrent)
+							work_info.save()
+						except:
+							print "Unable to save work info:", sys.exc_info()
+
+		#Store a dummy like, otherwise connection_profile doesn't show up in search results with blank filter
+		try:
+			new_like = Connection_OtherInfo(conn_prof=self, name='', category='', info_type='like')
+			new_like.save()
+		except Exception, e:
+			msg = datetime.datetime.now() + str(Exception) + str(e)
+			print msg
+			logger.error(msg)
